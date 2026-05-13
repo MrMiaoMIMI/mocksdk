@@ -40,6 +40,7 @@ type Decision struct {
 type DecisionTrace struct {
 	RulesetID      string `json:"ruleset_id,omitempty"`
 	RuleID         string `json:"rule_id,omitempty"`
+	SnapshotID     string `json:"snapshot_id,omitempty"`
 	FallbackReason string `json:"fallback_reason,omitempty"`
 }
 
