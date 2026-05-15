@@ -2,6 +2,7 @@ package spexadapter
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/MrMiaoMIMI/mocksdk"
@@ -9,6 +10,59 @@ import (
 
 type testDecider struct {
 	event mocksdk.Event
+}
+
+func TestResponseFromDecisionDecodesSPEXPayload(t *testing.T) {
+	decision := mocksdk.Decision{
+		Kind:     mocksdk.DecisionKindResponse,
+		Protocol: Protocol,
+		Response: &mocksdk.ResponseDecision{
+			Protocol: Protocol,
+			Payload:  json.RawMessage(`{"code":0,"resp":"{\"order_status\":\"mocked\"}"}`),
+		},
+	}
+	response, err := ResponseFromDecision(decision)
+	if err != nil {
+		t.Fatalf("ResponseFromDecision() error = %v", err)
+	}
+	if response.Code != 0 {
+		t.Fatalf("unexpected code: %d", response.Code)
+	}
+	if string(response.Resp) != `{"order_status":"mocked"}` {
+		t.Fatalf("unexpected resp: %s", response.Resp)
+	}
+}
+
+func TestPayloadFromDecisionAcceptsRawJSONResp(t *testing.T) {
+	decision := mocksdk.Decision{
+		Kind:     mocksdk.DecisionKindResponse,
+		Protocol: Protocol,
+		Response: &mocksdk.ResponseDecision{
+			Protocol: Protocol,
+			Payload:  json.RawMessage(`{"code":0,"resp":{"order_status":"mocked"}}`),
+		},
+	}
+	payload, err := PayloadFromDecision(decision)
+	if err != nil {
+		t.Fatalf("PayloadFromDecision() error = %v", err)
+	}
+	if string(payload.Resp) != `{"order_status":"mocked"}` {
+		t.Fatalf("unexpected resp: %s", payload.Resp)
+	}
+}
+
+func TestPayloadFromDecisionRejectsInvalidJSONRespString(t *testing.T) {
+	decision := mocksdk.Decision{
+		Kind:     mocksdk.DecisionKindResponse,
+		Protocol: Protocol,
+		Response: &mocksdk.ResponseDecision{
+			Protocol: Protocol,
+			Payload:  json.RawMessage(`{"code":0,"resp":"not json"}`),
+		},
+	}
+	if _, err := PayloadFromDecision(decision); err == nil {
+		t.Fatalf("expected invalid JSON resp error")
+	}
 }
 
 func (d *testDecider) Decide(ctx context.Context, event mocksdk.Event) (mocksdk.Decision, error) {

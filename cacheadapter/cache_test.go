@@ -1,6 +1,12 @@
 package cacheadapter
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/MrMiaoMIMI/mocksdk"
+)
 
 func TestEventBuildsGenericEvent(t *testing.T) {
 	event := Event("workspace", Request{
@@ -30,5 +36,27 @@ func TestEventBuildsGenericEvent(t *testing.T) {
 	value, ok := event.Request["value"].(map[string]interface{})
 	if !ok || value["name"] != "demo" {
 		t.Fatalf("unexpected value: %#v", event.Request["value"])
+	}
+}
+
+func TestPayloadFromDecisionDecodesCachePayload(t *testing.T) {
+	decision := mocksdk.Decision{
+		Kind:     mocksdk.DecisionKindResponse,
+		Protocol: Protocol,
+		Response: &mocksdk.ResponseDecision{
+			Protocol: Protocol,
+			Payload:  json.RawMessage(`{"hit":false,"value":{"name":"mocked"}}`),
+		},
+	}
+
+	payload, err := PayloadFromDecision(decision)
+	if err != nil {
+		t.Fatalf("PayloadFromDecision() error = %v", err)
+	}
+	if payload.Hit {
+		t.Fatalf("expected cache miss payload")
+	}
+	if !strings.Contains(string(payload.Value), `"mocked"`) {
+		t.Fatalf("unexpected value payload: %s", string(payload.Value))
 	}
 }

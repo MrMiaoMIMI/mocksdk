@@ -13,6 +13,14 @@ import (
 	"github.com/MrMiaoMIMI/mocksdk"
 )
 
+const Protocol = "http"
+
+type HTTPPayload struct {
+	Status  int                 `json:"status,omitempty"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	Body    json.RawMessage     `json:"body,omitempty"`
+}
+
 func NormalizeHTTPRequest(r *http.Request, namespace string) (mocksdk.Event, error) {
 	bodyBytes, err := readAndRestoreBody(r)
 	if err != nil {
@@ -63,13 +71,15 @@ func Decide(ctx context.Context, client *mocksdk.Client, r *http.Request, namesp
 }
 
 func ApplyResponse(w http.ResponseWriter, decision mocksdk.Decision) error {
-	if decision.Kind != mocksdk.DecisionKindResponse || decision.Response == nil {
-		return &mocksdk.Error{Kind: mocksdk.ErrorKindConfig, Message: "decision is not a response decision"}
+	payload, err := PayloadFromDecision(decision)
+	if err != nil {
+		return err
 	}
-	if decision.Response.Status < 100 || decision.Response.Status > 599 {
+	status := payload.Status
+	if status < 100 || status > 599 {
 		return &mocksdk.Error{Kind: mocksdk.ErrorKindConfig, Message: "response decision status must be between 100 and 599"}
 	}
-	for key, values := range decision.Response.Headers {
+	for key, values := range payload.Headers {
 		if IsHopByHopHeader(key) {
 			continue
 		}
@@ -77,8 +87,8 @@ func ApplyResponse(w http.ResponseWriter, decision mocksdk.Decision) error {
 			w.Header().Add(key, value)
 		}
 	}
-	w.WriteHeader(decision.Response.Status)
-	body, err := responseBodyBytes(decision.Response.Body)
+	w.WriteHeader(status)
+	body, err := responseBodyBytes(payload.Body)
 	if err != nil {
 		return err
 	}
@@ -89,6 +99,65 @@ func ApplyResponse(w http.ResponseWriter, decision mocksdk.Decision) error {
 		return fmt.Errorf("write response decision body: %w", err)
 	}
 	return nil
+}
+
+func PayloadFromDecision(decision mocksdk.Decision) (HTTPPayload, error) {
+	if decision.Kind != mocksdk.DecisionKindResponse || decision.Response == nil {
+		return HTTPPayload{}, &mocksdk.Error{Kind: mocksdk.ErrorKindConfig, Message: "decision is not a response decision"}
+	}
+	if !isHTTPResponse(decision.Response) {
+		return HTTPPayload{}, &mocksdk.Error{Kind: mocksdk.ErrorKindConfig, Message: "response decision protocol is not http"}
+	}
+	payload := HTTPPayload{Status: http.StatusOK}
+	if len(decision.Response.Payload) == 0 || bytes.Equal(decision.Response.Payload, []byte("null")) {
+		return payload, nil
+	}
+	var raw struct {
+		Status  json.RawMessage `json:"status"`
+		Headers json.RawMessage `json:"headers"`
+		Body    json.RawMessage `json:"body"`
+	}
+	if err := decision.Response.DecodePayload(&raw); err != nil {
+		return HTTPPayload{}, err
+	}
+	if len(raw.Status) > 0 && !bytes.Equal(raw.Status, []byte("null")) {
+		if err := json.Unmarshal(raw.Status, &payload.Status); err != nil {
+			return HTTPPayload{}, &mocksdk.Error{Kind: mocksdk.ErrorKindConfig, Message: "response decision status must be a number"}
+		}
+	}
+	headers, err := decodeHeaders(raw.Headers)
+	if err != nil {
+		return HTTPPayload{}, err
+	}
+	payload.Headers = headers
+	payload.Body = raw.Body
+	return payload, nil
+}
+
+func decodeHeaders(raw json.RawMessage) (map[string][]string, error) {
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, nil
+	}
+	var headers map[string][]string
+	if err := json.Unmarshal(raw, &headers); err == nil {
+		return headers, nil
+	}
+	var single map[string]string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		headers = make(map[string][]string, len(single))
+		for key, value := range single {
+			headers[key] = []string{value}
+		}
+		return headers, nil
+	}
+	return nil, &mocksdk.Error{Kind: mocksdk.ErrorKindConfig, Message: "response decision headers must be an object"}
+}
+
+func isHTTPResponse(response *mocksdk.ResponseDecision) bool {
+	if response.Protocol != "" {
+		return strings.EqualFold(response.Protocol, Protocol)
+	}
+	return true
 }
 
 func readAndRestoreBody(r *http.Request) ([]byte, error) {

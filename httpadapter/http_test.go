@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -184,29 +185,16 @@ func TestIsHopByHopHeader(t *testing.T) {
 func TestApplyResponseWritesStatusHeadersAndBody(t *testing.T) {
 	for name, decision := range map[string]mocksdk.Decision{
 		"json": {
-			Kind: mocksdk.DecisionKindResponse,
-			Response: &mocksdk.ResponseDecision{
-				Status: http.StatusCreated,
-				Headers: map[string][]string{
-					"Content-Type": {"application/json"},
-					"X-Multi":      {"one", "two"},
-				},
-				Body: json.RawMessage(`{"ok":true}`),
-			},
+			Kind:     mocksdk.DecisionKindResponse,
+			Response: httpResponseDecision(http.StatusCreated, `{"Content-Type":["application/json"],"X-Multi":["one","two"]}`, `{"ok":true}`),
 		},
 		"text": {
-			Kind: mocksdk.DecisionKindResponse,
-			Response: &mocksdk.ResponseDecision{
-				Status:  http.StatusAccepted,
-				Headers: map[string][]string{"Content-Type": {"text/plain"}},
-				Body:    json.RawMessage(`"plain text"`),
-			},
+			Kind:     mocksdk.DecisionKindResponse,
+			Response: httpResponseDecision(http.StatusAccepted, `{"Content-Type":["text/plain"]}`, `"plain text"`),
 		},
 		"empty": {
-			Kind: mocksdk.DecisionKindResponse,
-			Response: &mocksdk.ResponseDecision{
-				Status: http.StatusNoContent,
-			},
+			Kind:     mocksdk.DecisionKindResponse,
+			Response: httpResponseDecision(http.StatusNoContent, `null`, `null`),
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -215,8 +203,9 @@ func TestApplyResponseWritesStatusHeadersAndBody(t *testing.T) {
 				t.Fatalf("ApplyResponse() error = %v", err)
 			}
 			resp := recorder.Result()
-			if resp.StatusCode != decision.Response.Status {
-				t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, decision.Response.Status)
+			status := responseStatusForTest(t, decision.Response)
+			if resp.StatusCode != status {
+				t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, status)
 			}
 			body, err := readAllAndClose(resp.Body)
 			if err != nil {
@@ -241,4 +230,23 @@ func TestApplyResponseWritesStatusHeadersAndBody(t *testing.T) {
 			}
 		})
 	}
+}
+
+func httpResponseDecision(status int, headers string, body string) *mocksdk.ResponseDecision {
+	return &mocksdk.ResponseDecision{
+		Protocol: Protocol,
+		Payload:  json.RawMessage(`{"status":` + strconv.Itoa(status) + `,"headers":` + headers + `,"body":` + body + `}`),
+	}
+}
+
+func responseStatusForTest(t *testing.T, response *mocksdk.ResponseDecision) int {
+	t.Helper()
+	payload, err := PayloadFromDecision(mocksdk.Decision{
+		Kind:     mocksdk.DecisionKindResponse,
+		Response: response,
+	})
+	if err != nil {
+		t.Fatalf("PayloadFromDecision() error = %v", err)
+	}
+	return payload.Status
 }

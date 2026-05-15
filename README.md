@@ -51,3 +51,26 @@ The SDK includes small standard-library adapters:
 
 - `httpadapter`: normalizes `net/http` requests and applies response decisions
 - `cacheadapter`: builds cache operation events
+- `spexadapter`: builds SPEX events and decodes SPEX response decisions
+
+Response decision payloads are stored as a single `json.RawMessage` in
+`mocksdk.ResponseDecision.Payload`. Callers should use the protocol adapter
+helpers instead of reading protocol fields themselves:
+
+```go
+payload, err := httpadapter.PayloadFromDecision(decision)
+if err != nil {
+	return err
+}
+
+fmt.Println(payload.Status, payload.Headers, string(payload.Body))
+```
+
+Available typed payload helpers:
+
+- `httpadapter.PayloadFromDecision`: decodes `HTTPPayload` with `status`,
+  `headers`, and raw `body`
+- `spexadapter.PayloadFromDecision`: decodes `SPEXPayload` with `code` and raw
+  JSON `resp`
+- `cacheadapter.PayloadFromDecision`: decodes `CachePayload` with `hit` and
+  raw `value`

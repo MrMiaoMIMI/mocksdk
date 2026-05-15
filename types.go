@@ -31,6 +31,7 @@ type Decision struct {
 	Kind     DecisionKind      `json:"kind"`
 	Matched  bool              `json:"matched"`
 	Fallback bool              `json:"fallback,omitempty"`
+	Protocol string            `json:"protocol,omitempty"`
 	Trace    DecisionTrace     `json:"trace"`
 	Response *ResponseDecision `json:"response,omitempty"`
 	Forward  *ForwardDecision  `json:"forward,omitempty"`
@@ -45,9 +46,21 @@ type DecisionTrace struct {
 }
 
 type ResponseDecision struct {
-	Status  int                 `json:"status"`
-	Headers map[string][]string `json:"headers,omitempty"`
-	Body    json.RawMessage     `json:"body,omitempty"`
+	Protocol string          `json:"protocol,omitempty"`
+	Payload  json.RawMessage `json:"payload,omitempty"`
+}
+
+func (r *ResponseDecision) DecodePayload(target interface{}) error {
+	if r == nil {
+		return newError(ErrorKindConfig, "response decision is nil", nil)
+	}
+	if len(r.Payload) == 0 {
+		return newError(ErrorKindConfig, "response decision payload is empty", nil)
+	}
+	if err := json.Unmarshal(r.Payload, target); err != nil {
+		return newError(ErrorKindConfig, "decode response decision payload", err)
+	}
+	return nil
 }
 
 type ForwardDecision struct {

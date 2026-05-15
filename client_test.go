@@ -40,13 +40,16 @@ func TestClientDecideReturnsResponseDecision(t *testing.T) {
 						"rule_id": "sdk-rule"
 					},
 					"response": {
-						"status": 202,
-						"headers": {
-							"x-sdk-decision": ["hit"]
-						},
-						"body": {
-							"source": "sdk",
-							"hit": true
+						"protocol": "http",
+						"payload": {
+							"status": 202,
+							"headers": {
+								"x-sdk-decision": ["hit"]
+							},
+							"body": {
+								"source": "sdk",
+								"hit": true
+							}
 						}
 					},
 					"meta": {
@@ -87,14 +90,22 @@ func TestClientDecideReturnsResponseDecision(t *testing.T) {
 	if decision.Response == nil {
 		t.Fatalf("expected response decision")
 	}
-	if decision.Response.Status != http.StatusAccepted {
-		t.Fatalf("unexpected response status: %d", decision.Response.Status)
+	var payload struct {
+		Status  int                 `json:"status"`
+		Headers map[string][]string `json:"headers"`
+		Body    json.RawMessage     `json:"body"`
 	}
-	if got := decision.Response.Headers["x-sdk-decision"]; len(got) != 1 || got[0] != "hit" {
-		t.Fatalf("unexpected response headers: %+v", decision.Response.Headers)
+	if err := decision.Response.DecodePayload(&payload); err != nil {
+		t.Fatalf("DecodePayload() error = %v", err)
 	}
-	if !strings.Contains(string(decision.Response.Body), `"source"`) || !strings.Contains(string(decision.Response.Body), `"sdk"`) {
-		t.Fatalf("unexpected response body: %s", string(decision.Response.Body))
+	if payload.Status != http.StatusAccepted {
+		t.Fatalf("unexpected response status: %d", payload.Status)
+	}
+	if got := payload.Headers["x-sdk-decision"]; len(got) != 1 || got[0] != "hit" {
+		t.Fatalf("unexpected response headers: %+v", payload.Headers)
+	}
+	if !strings.Contains(string(payload.Body), `"source"`) || !strings.Contains(string(payload.Body), `"sdk"`) {
+		t.Fatalf("unexpected response body: %s", string(payload.Body))
 	}
 	if decision.Meta.TraceID != "trace-sdk" {
 		t.Fatalf("unexpected trace id: %s", decision.Meta.TraceID)
