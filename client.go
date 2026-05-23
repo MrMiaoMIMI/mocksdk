@@ -16,13 +16,15 @@ import (
 const decisionPath = "/mockserver/api/v1/sdk/decision"
 
 const (
-	EnvMockServerHost = "MOCKSERVER_HOST"
-	EnvNamespaceID    = "MOCKSERVER_NAMESPACE_ID"
-	EnvTimeoutMS      = "MOCKSERVER_TIMEOUT_MS"
+	EnvMockServerHost      = "MOCKSERVER_HOST"
+	EnvMockServerAPIPrefix = "MOCKSERVER_API_PREFIX"
+	EnvNamespaceID         = "MOCKSERVER_NAMESPACE_ID"
+	EnvTimeoutMS           = "MOCKSERVER_TIMEOUT_MS"
 )
 
 type Config struct {
 	MockServerURL string
+	APIPrefix     string
 	Namespace     string
 	Timeout       time.Duration
 	HTTPClient    *http.Client
@@ -60,6 +62,9 @@ func resolveConfig(config Config) (Config, error) {
 	if value := strings.TrimSpace(os.Getenv(EnvMockServerHost)); value != "" {
 		config.MockServerURL = value
 	}
+	if value := strings.TrimSpace(os.Getenv(EnvMockServerAPIPrefix)); value != "" {
+		config.APIPrefix = value
+	}
 	if value := strings.TrimSpace(os.Getenv(EnvNamespaceID)); value != "" {
 		config.Namespace = value
 	}
@@ -84,16 +89,52 @@ func resolveConfig(config Config) (Config, error) {
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return Config{}, newError(ErrorKindConfig, "mockserver url must include scheme and host", nil)
 	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return Config{}, newError(ErrorKindConfig, "mockserver url must not include query or fragment", nil)
+	}
+	apiPrefix, err := normalizeAPIPrefix(config.APIPrefix)
+	if err != nil {
+		return Config{}, err
+	}
 	namespace := normalizedNamespace(config.Namespace)
 	if !isValidNamespace(namespace) {
 		return Config{}, newError(ErrorKindConfig, "namespace may only contain letters, numbers, underscores, and hyphens", nil)
 	}
-	config.MockServerURL = baseURL
+	config.MockServerURL = appendAPIPrefix(baseURL, parsed, apiPrefix)
+	config.APIPrefix = apiPrefix
 	config.Namespace = namespace
 	if config.Timeout < 0 {
 		return Config{}, newError(ErrorKindConfig, "timeout must not be negative", nil)
 	}
 	return config, nil
+}
+
+func normalizeAPIPrefix(value string) (string, error) {
+	prefix := strings.TrimSpace(value)
+	if prefix == "" || prefix == "/" {
+		return "", nil
+	}
+	if strings.ContainsAny(prefix, " \t\r\n?#:*") {
+		return "", newError(ErrorKindConfig, EnvMockServerAPIPrefix+" must be a literal URL path prefix", nil)
+	}
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	return strings.TrimRight(prefix, "/"), nil
+}
+
+func appendAPIPrefix(baseURL string, parsed *url.URL, apiPrefix string) string {
+	if apiPrefix == "" {
+		return baseURL
+	}
+	existingPath := strings.TrimRight(parsed.Path, "/")
+	if existingPath == "" || existingPath == "/" {
+		return baseURL + apiPrefix
+	}
+	if existingPath == apiPrefix || strings.HasSuffix(existingPath, apiPrefix) {
+		return baseURL
+	}
+	return baseURL + apiPrefix
 }
 
 func (c *Client) Decide(ctx context.Context, event Event) (Decision, error) {

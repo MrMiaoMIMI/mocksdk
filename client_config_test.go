@@ -13,18 +13,20 @@ import (
 
 func TestNewClientEnvironmentOverridesOptions(t *testing.T) {
 	t.Setenv(EnvMockServerHost, "http://env-mockserver.local/")
+	t.Setenv(EnvMockServerAPIPrefix, "/env-prefix")
 	t.Setenv(EnvNamespaceID, "env_namespace")
 	t.Setenv(EnvTimeoutMS, "250")
 
 	client, err := NewClient(Config{
 		MockServerURL: "http://option-mockserver.local",
+		APIPrefix:     "/option-prefix",
 		Namespace:     "option_namespace",
 		Timeout:       time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
-	if client.mockServerURL != "http://env-mockserver.local" {
+	if client.mockServerURL != "http://env-mockserver.local/env-prefix" {
 		t.Fatalf("unexpected mockserver url: %s", client.mockServerURL)
 	}
 	if client.namespace != "env_namespace" {
@@ -35,13 +37,45 @@ func TestNewClientEnvironmentOverridesOptions(t *testing.T) {
 	}
 }
 
+func TestNewClientAppliesAPIPrefix(t *testing.T) {
+	for name, tc := range map[string]struct {
+		config Config
+		want   string
+	}{
+		"option prefix": {
+			config: Config{MockServerURL: "http://mockserver.local", APIPrefix: "tenant-a/"},
+			want:   "http://mockserver.local/tenant-a",
+		},
+		"base url already contains prefix": {
+			config: Config{MockServerURL: "http://mockserver.local/tenant-a/", APIPrefix: "/tenant-a"},
+			want:   "http://mockserver.local/tenant-a",
+		},
+		"base url path plus prefix": {
+			config: Config{MockServerURL: "http://mockserver.local/proxy", APIPrefix: "/tenant-a"},
+			want:   "http://mockserver.local/proxy/tenant-a",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, err := NewClient(tc.config)
+			if err != nil {
+				t.Fatalf("NewClient() error = %v", err)
+			}
+			if client.mockServerURL != tc.want {
+				t.Fatalf("unexpected mockserver url: %s", client.mockServerURL)
+			}
+		})
+	}
+}
+
 func TestNewClientValidationErrorsAreConfigErrors(t *testing.T) {
 	for name, config := range map[string]Config{
-		"missing url":       {},
-		"invalid url":       {MockServerURL: "://bad"},
-		"relative url":      {MockServerURL: "mockserver.local"},
-		"invalid namespace": {MockServerURL: "http://mockserver.local", Namespace: "bad namespace"},
-		"negative timeout":  {MockServerURL: "http://mockserver.local", Timeout: -time.Second},
+		"missing url":        {},
+		"invalid url":        {MockServerURL: "://bad"},
+		"relative url":       {MockServerURL: "mockserver.local"},
+		"query in url":       {MockServerURL: "http://mockserver.local?tenant=a"},
+		"invalid api prefix": {MockServerURL: "http://mockserver.local", APIPrefix: "http://proxy.example.com"},
+		"invalid namespace":  {MockServerURL: "http://mockserver.local", Namespace: "bad namespace"},
+		"negative timeout":   {MockServerURL: "http://mockserver.local", Timeout: -time.Second},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewClient(config)

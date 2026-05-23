@@ -21,6 +21,7 @@ go get github.com/MrMiaoMIMI/mocksdk
 ```go
 client, err := mocksdk.NewClient(mocksdk.Config{
 	MockServerURL: "http://127.0.0.1:8080",
+	APIPrefix:     "/tenant-a",
 	Namespace:     "default",
 })
 if err != nil {
@@ -41,9 +42,18 @@ decision, err := client.Decide(ctx, mocksdk.Event{
 Configuration can also be provided through environment variables:
 
 - `MOCKSERVER_HOST`: mockserver base URL, for example
-  `http://127.0.0.1:8080`
+  `http://127.0.0.1:8080`. It may also include the deployment prefix, for
+  example `http://127.0.0.1:8080/tenant-a`.
+- `MOCKSERVER_API_PREFIX`: optional mockserver deployment path prefix, for
+  example `/tenant-a`. This is appended before `/mockserver/api/v1/sdk/decision`
+  unless `MOCKSERVER_HOST` already ends with the same prefix.
 - `MOCKSERVER_NAMESPACE_ID`: namespace id, defaults to `default`
 - `MOCKSERVER_TIMEOUT_MS`: optional request timeout in milliseconds
+
+When the mockserver backend is started with `MOCKSERVER_API_PREFIX=/tenant-a`,
+configure the SDK with either `MOCKSERVER_HOST=http://127.0.0.1:8080/tenant-a`
+or `MOCKSERVER_HOST=http://127.0.0.1:8080` plus
+`MOCKSERVER_API_PREFIX=/tenant-a`.
 
 ## Protocol Adapters
 

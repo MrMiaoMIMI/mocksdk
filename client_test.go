@@ -112,6 +112,29 @@ func TestClientDecideReturnsResponseDecision(t *testing.T) {
 	}
 }
 
+func TestClientDecideUsesAPIPrefix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tenant-a"+decisionPath {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":0,"data":{"decision":{"kind":"forward","matched":false}}}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{MockServerURL: server.URL, APIPrefix: "/tenant-a"})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	decision, err := client.Decide(context.Background(), Event{Protocol: "http", Namespace: "default"})
+	if err != nil {
+		t.Fatalf("Decide() error = %v", err)
+	}
+	if decision.Kind != DecisionKindForward {
+		t.Fatalf("unexpected decision kind: %s", decision.Kind)
+	}
+}
+
 func TestClientDecideReturnsForwardDecision(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
