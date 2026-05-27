@@ -143,6 +143,15 @@ func (c *Client) Decide(ctx context.Context, event Event) (Decision, error) {
 		ctx, cancel = context.WithTimeout(ctx, c.timeout)
 		defer cancel()
 	}
+	if event.Meta.ScenarioID == "" {
+		if scenarioID, ok := ScenarioIDFromContext(ctx); ok {
+			event.Meta.ScenarioID = scenarioID
+		}
+	}
+	event.Meta.ScenarioID = strings.TrimSpace(event.Meta.ScenarioID)
+	if err := ValidateScenarioID(event.Meta.ScenarioID); err != nil {
+		return Decision{}, newError(ErrorKindConfig, "invalid scenario id", err)
+	}
 	payload, err := json.Marshal(decisionRequest{Event: event})
 	if err != nil {
 		return Decision{}, newError(ErrorKindConfig, "marshal decision request", err)

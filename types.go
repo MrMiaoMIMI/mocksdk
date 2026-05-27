@@ -13,9 +13,10 @@ type Event struct {
 type EventRequest map[string]interface{}
 
 type EventMeta struct {
-	TraceID string                 `json:"trace_id,omitempty"`
-	Source  string                 `json:"source,omitempty"`
-	Extra   map[string]interface{} `json:"extra,omitempty"`
+	TraceID    string                 `json:"trace_id,omitempty"`
+	Source     string                 `json:"source,omitempty"`
+	ScenarioID string                 `json:"scenario_id,omitempty"`
+	Extra      map[string]interface{} `json:"extra,omitempty"`
 }
 
 const DefaultNamespace = "default"
@@ -68,5 +69,6 @@ type ForwardDecision struct {
 }
 
 type DecisionMeta struct {
-	TraceID string `json:"trace_id,omitempty"`
+	TraceID    string `json:"trace_id,omitempty"`
+	ScenarioID string `json:"scenario_id,omitempty"`
 }

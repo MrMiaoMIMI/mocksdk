@@ -53,7 +53,8 @@ func TestClientDecideReturnsResponseDecision(t *testing.T) {
 						}
 					},
 					"meta": {
-						"trace_id": "trace-sdk"
+						"trace_id": "trace-sdk",
+						"scenario_id": "scn_response_case1"
 					}
 				}
 			}
@@ -109,6 +110,9 @@ func TestClientDecideReturnsResponseDecision(t *testing.T) {
 	}
 	if decision.Meta.TraceID != "trace-sdk" {
 		t.Fatalf("unexpected trace id: %s", decision.Meta.TraceID)
+	}
+	if decision.Meta.ScenarioID != "scn_response_case1" {
+		t.Fatalf("unexpected scenario id: %s", decision.Meta.ScenarioID)
 	}
 }
 

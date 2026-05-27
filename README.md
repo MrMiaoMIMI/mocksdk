@@ -39,6 +39,25 @@ decision, err := client.Decide(ctx, mocksdk.Event{
 })
 ```
 
+## Scenario Context
+
+Agent scenarios are carried through `context.Context`, not a process-wide
+environment variable:
+
+```go
+ctx = mocksdk.WithScenarioID(ctx, "scn_checkout_timeout")
+```
+
+Valid scenario ids start with `scn_`, are 8 to 128 characters long, and only
+contain letters, digits, underscores, and hyphens. `Client.Decide` copies the
+context scenario id into `event.Meta.ScenarioID` when the event does not already
+set one, so request-level callers can decide when a business request should use
+a scenario overlay.
+
+When `event.Meta.ScenarioID` is present, MockServer evaluates that scenario
+overlay first. A missing, inactive, expired, or unmatched scenario uses the
+event namespace fallback policy; it does not fall through to published rulesets.
+
 Configuration can also be provided through environment variables:
 
 - `MOCKSERVER_HOST`: mockserver base URL, for example
